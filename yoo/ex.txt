@@ -1,0 +1,77 @@
+# 1. 패키지 설정(처음이라면 패키지를 설치할 것)
+import time
+
+import pandas as pd
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import ElementNotInteractableException
+
+# 2. Driver & BeautifulSoup
+driver = webdriver.Chrome(ChromeDriverManager().install())
+
+# 3. 크롤링할 url을 설정
+org_crawling_url = "https://map.kakao.com/"
+driver.get(org_crawling_url)
+time.sleep(2)
+
+# 4. 검색창 소스
+element = driver.find_element(By.CLASS_NAME, 'query.tf_keyword')
+
+# 5. send_keys를 통해 검색창 입력설정
+element.send_keys("용산 맛집")
+time.sleep(2)
+
+# 6. 팝업창 닫기
+driver.find_element(By.CLASS_NAME, 'DimmedLayer').click()
+time.sleep(2)
+
+# 7. 검색실행
+driver.find_element(By.CLASS_NAME, 'go.ico_search.btn_search.active').click()
+time.sleep(2)
+
+# 8. 장소 더보기(많은 장소들을 불러오기 위함)
+driver.find_element(By.ID, 'info.search.place.more').click()
+time.sleep(4)
+
+# 9. 데이터를 넣을 공간 설정
+addr1list = []
+addr2list = []
+namelist = []
+
+page = 1
+
+# 10. while문으로 page 차례대로 설정
+# 검색하면 데이터는 총 2페이지
+while page < 3:
+    xPath = '//*[@id="info.search.page.no' + str(page) + '"]'
+    try:
+        print(page)
+        driver.find_element(By.XPATH, xPath).send_keys(Keys.ENTER)
+    except ElementNotInteractableException:
+        print('End of Page')
+        break
+    time.sleep(3)
+    place_lists = driver.find_elements(By.CLASS_NAME, 'PlaceItem.clickArea')
+    # 장소리스트값들을 하나씩 select문으로 텍스트값을 저장 후 리스트에 추가
+    for p in place_lists:
+        store_html = p.get_attribute('innerHTML')
+        store_info = BeautifulSoup(store_html, "html.parser")
+        name = store_info.select('div.head_item.clickArea > strong > a.link_name')[0].text.strip()
+        addr1 = store_info.select('div.info_item > div.addr > p')[0].text.strip()
+        addr2 = store_info.select('div.info_item > div.addr > p.lot_number')[0].text.strip()
+        namelist.append(name)
+        addr1list.append(addr1)
+        addr2list.append(addr2)
+    page = page + 1
+
+
+# 11. 데이터프레임 설정 후 csv로 저장
+data = {"name": namelist, "addr1": addr1list, "addr2": addr2list}
+df = pd.DataFrame(data)
+print(df)
+
+# 12. kakaomap.csv 저장할 때 index값을 id로 설정해야 front에서 사용하기 좋음
+df.to_csv("kakaomap.csv", encoding="utf-8-sig", index_label=['Id'])
